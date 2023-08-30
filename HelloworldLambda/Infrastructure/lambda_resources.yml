@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A template that stands up a lambda function with an api gateway.
+Parameters:
+  ApiGatewayName:
+    Type: String
+    Default: demo-gateway
+    Description: The name of the api gateway
+  ApiGatewayRootMethod:
+    Type: String
+    Default: POST
+    Description: The root method for the api gateway (Example - POST - GET)
+  App:
+    Type: String
+    Default: demo-app
+    Description: The name of the application
+  CodeBucketKey:
+    Type: String
+    Description: The s3 bucket key where that holds the zipped up lambda code
+  CodeBucketName:
+    Type: String
+    Description: The name of the s3 bucket that holds the zipped up lambda code
+  Env:
+    Type: String
+    Default: dev
+    Description: The name of the environment the resources will be deployed to
+  LambdaFuncName:
+    Type: String
+    Default: demo-func
+    Description: The name of the lambda function
+  LambdaPolicyName:
+    Type: String
+    Default: demo-func-policy
+    Description: The name of the lambda role policy
+  LambdaRoleName:
+    Type: String
+    Default: demo-func-role
+    Description: The name of the lambda role
+  Region:
+    Type: String
+    Default: us-west-2
+    Description: The region to deploy the lambda function
+Resources:
+  Gateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Description: The rest api gateway that will trigger the lambda function
+      Name: !Sub ${Env}-${ApiGatewayName}-${Region}
+      Tags:
+        - Key: "App"
+          Value: !Sub ${App}
+  GatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: GatewayRootMethod
+    Description: The deployment of the api gateway
+    Properties:
+      RestApiId: !Ref Gateway
+      StageName: !Sub ${Env}
+  GatewayRootMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: !Sub ${ApiGatewayRootMethod}
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub
+          - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations 
+          - LambdaArn: !GetAtt Function.Arn
+      ResourceId: !GetAtt Gateway.RootResourceId
+      RestApiId: !Ref Gateway
+  Function:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Architectures: 
+        - x86_64
+      Code: 
+        S3Bucket: !Sub ${CodeBucketName}
+        S3Key: !Sub ${CodeBucketKey}
+      FunctionName: !Sub ${Env}-${LambdaFuncName}-${Region}
+      Handler: index.lambda_handler
+      MemorySize: 128
+      PackageType: Zip
+      Role: !GetAtt FunctionRole.Arn
+      Runtime: python3.10
+      Tags:
+        - Key: "App"
+          Value: !Sub ${App}      
+  FunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${Env}-${LambdaFuncName}-${Region}
+      RetentionInDays: 30
+      Tags:
+        - Key: "App"
+          Value: !Sub ${App}      
+  FunctionRole:
+    Type: AWS::IAM::Role
+    DependsOn: FunctionRolePolicy
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Service:
+                lambda.amazonaws.com
+            Action: 
+              - 'sts:AssumeRole'
+      Description: The iam role that will be used to execute the lambda function
+      ManagedPolicyArns: 
+        - !Ref FunctionRolePolicy
+      RoleName: !Sub ${Env}-${LambdaRoleName}-${Region}
+      Tags:
+        - Key: "App"
+          Value: !Sub ${App}
+  FunctionRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${Env}-${LambdaPolicyName}-${Region}
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            - Effect: Allow
+              Action:
+                - 'logs:CreateLogGroup'
+              Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+            - Effect: Allow
+              Action:
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+              Resource: !GetAtt FunctionLogs.Arn
+  FunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt Function.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${Region}:${AWS::AccountId}:${Gateway}/${Env}/${ApiGatewayRootMethod}/
