@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Stands up a private s3 bucket with conditional access to a parameterized ip address
+Parameters:
+  BucketName:
+    Type: String
+    Description: The name of the bucket
+  Region:
+    Type: String
+    Description: The name of the region
+  AllowedIpAddressSource:
+    Type: String
+    Description: The source IP address that will be allowed for this bucket.
+Resources:
+  s3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub ${BucketName}-${Region}
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+      Tags:
+        - Key: Region
+          Value: !Sub ${Region}  
+  s3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref s3Bucket
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+              - "s3:GetObjectAttributes"
+              - "s3:ListBucket"
+            Resource: 
+              - !Sub "${s3Bucket.Arn}" 
+              - !Sub "${s3Bucket.Arn}/*"
+            Condition:
+              IpAddress: 
+                "aws:SourceIp": !Sub ${AllowedIpAddressSource}
+            Principal: "*"
