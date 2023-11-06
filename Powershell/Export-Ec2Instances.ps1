@@ -48,7 +48,7 @@ function Export-Ec2Instances{
                     $ip = $instance.PrivateIpAddress
                     $launchTime = $instance.LaunchTime
 
-                    $row = "$profileName,$instanceId,$nodeName,$state,$region,$os,$ip,$launchTime"
+                    $row = "$profileName,$instanceId,$state,$region,$os,$ip,$launchTime"
                     Add-Content -LiteralPath $writeFile -Value $row
                 }
             }
