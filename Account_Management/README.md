@@ -2,6 +2,10 @@ This directory holds IaC for AWS deployment.
 
 ## MFA
     ```
+    Remove-Item "$env:USERPROFILE\.aws\cli\cache\*" -Force
+    ```
+
+    ```
     aws configure export-credentials --profile infra-engineer --format powershell | Invoke-Expression
     ```
 
